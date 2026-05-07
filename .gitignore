@@ -1,0 +1,13 @@
+node_modules/
+public/dist/
+public/app.js
+public/app.css
+.env.local
+.env
+tmp/
+*.log
+.claude/
+cluster.json
+DESIGN.md
+MULTI-AGENT-PLAN.md
+vl-cet-cnooc-analysis.md

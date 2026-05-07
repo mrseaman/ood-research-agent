@@ -1,0 +1,9 @@
+---
+name: Research Agent
+category: Tools
+subcategory: AI
+icon: fa://flask
+url: /pun/sys/research-agent
+description: |-
+  AI-powered research agent for scientific Q&A, literature search, and computational simulation on HPC clusters
+new_window: true

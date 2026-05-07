@@ -1,0 +1,48 @@
+{
+  "software": {
+    "vasp": {
+      "versions": ["6.4.2", "vtst"],
+      "default": "6.4.2",
+      "notes": "vtst version includes NEB/Dimer transition state methods",
+      "potentials": "/path/to/POTCAR"
+    },
+    "gaussian": {
+      "versions": ["16"],
+      "default": "16"
+    },
+    "cp2k": {
+      "versions": ["9.1"],
+      "default": "9.1"
+    },
+    "Multiwfn": {
+      "versions": [],
+      "notes": "Multifunctional wavefunction analyzer"
+    },
+    "vmd": {
+      "versions": ["1.9.3", "2.0.0"],
+      "default": "1.9.3",
+      "notes": "Molecular visualization"
+    },
+    "anaconda3": {
+      "versions": [],
+      "notes": "Python distribution with conda package manager"
+    },
+    "pytorch": {
+      "versions": ["1.0"]
+    },
+    "deepmdGPU": {
+      "versions": [],
+      "notes": "DeePMD-kit with GPU support for machine learning potentials"
+    },
+    "intel": {
+      "versions": ["2023.2.1"],
+      "default": "2023.2.1",
+      "notes": "Intel oneAPI compilers and MKL"
+    },
+    "nvhpc": {
+      "versions": ["24.1"],
+      "default": "24.1",
+      "notes": "NVIDIA HPC SDK (compilers, CUDA, math libraries)"
+    }
+  }
+}

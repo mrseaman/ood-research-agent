@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -e
+
+APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$APP_ROOT"
+
+echo "== Building Research Assistant =="
+
+echo "== Installing dependencies =="
+npm install --production
+
+echo "== Installing build dependencies =="
+npm install --save-dev esbuild react react-dom react-markdown react-syntax-highlighter remark-gfm
+
+echo "== Building frontend assets =="
+npx esbuild client/index.jsx \
+  --bundle \
+  --outdir=public/dist \
+  --loader:.jsx=jsx \
+  --jsx=automatic \
+  --define:process.env.NODE_ENV=\"production\" \
+  --minify \
+  --target=es2020
+
+echo "== Restarting application server =="
+mkdir -p tmp
+touch tmp/restart.txt
+
+echo "== Done =="
