@@ -29,7 +29,15 @@ async function* streamChat(messages, tools, modelConfig, options = {}) {
   }
 
   if (options.thinking !== undefined) {
-    body.enable_thinking = !!options.thinking;
+    const enabled = !!options.thinking;
+    // Top-level form (Qwen3 / DashScope)
+    body.enable_thinking = enabled;
+    // vLLM-served reasoning models (DeepSeek-R1/V4, Qwen3) take it via chat_template_kwargs
+    body.chat_template_kwargs = {
+      ...(body.chat_template_kwargs || {}),
+      enable_thinking: enabled,
+      thinking: enabled,
+    };
   }
 
   const payload = JSON.stringify(body);

@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const http = require('http');
 const express = require('express');
@@ -20,11 +21,25 @@ const { runAgentLoop } = require('./server/agent-loop');
 const { confirmations } = require('./server/confirmations');
 const sessions = require('./server/sessions');
 const config = require('./server/config');
-const { validatePath } = require('./server/tools/file-ops');
+const { validatePath, IMAGE_EXTS, MIME_BY_EXT } = require('./server/tools/file-ops');
 
-// CSRF setup
+// CSRF setup — persist secret across Passenger restarts so issued tokens stay valid
 const tokens = new Tokens({});
-const secret = tokens.secretSync();
+const SECRET_PATH = path.join(os.homedir(), '.research-agent', 'csrf-secret');
+function loadOrCreateSecret() {
+  try {
+    return fs.readFileSync(SECRET_PATH, 'utf8').trim();
+  } catch {}
+  const s = tokens.secretSync();
+  try {
+    fs.mkdirSync(path.dirname(SECRET_PATH), { recursive: true });
+    fs.writeFileSync(SECRET_PATH, s, { mode: 0o600 });
+  } catch (err) {
+    console.warn('Could not persist CSRF secret:', err.message);
+  }
+  return s;
+}
+const secret = loadOrCreateSecret();
 
 const app = express();
 const router = express.Router();
@@ -55,6 +70,11 @@ router.get('/', (req, res) => {
   });
 });
 
+// Fresh CSRF token (used by client retry-on-403 path)
+router.get('/api/csrf', (req, res) => {
+  res.json({ csrfToken: tokens.create(secret) });
+});
+
 // --- Models API ---
 
 router.get('/api/models', (req, res) => {
@@ -65,7 +85,7 @@ router.get('/api/models', (req, res) => {
 // --- Chat API ---
 
 router.post('/api/chat', csrfProtect, (req, res) => {
-  const { messages, sessionId, modelId, thinking } = req.body;
+  const { messages, sessionId, modelId, thinking, webSearch } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'messages array required' });
@@ -83,7 +103,10 @@ router.post('/api/chat', csrfProtect, (req, res) => {
   let closed = false;
   req.on('close', () => { closed = true; });
 
-  runAgentLoop(res, messages, modelId, { thinking: thinking !== undefined ? !!thinking : undefined }).catch(err => {
+  runAgentLoop(res, messages, modelId, {
+    thinking: thinking !== undefined ? !!thinking : undefined,
+    webSearch: webSearch !== undefined ? !!webSearch : false,
+  }).catch(err => {
     if (!closed) {
       res.write(`event: error\ndata: ${JSON.stringify({ text: err.message })}\n\n`);
     }
@@ -128,6 +151,25 @@ router.post('/api/sessions', csrfProtect, (req, res) => {
 router.delete('/api/sessions/:id', csrfProtect, (req, res) => {
   sessions.deleteSession(req.params.id);
   res.json({ ok: true });
+});
+
+// Serve image files referenced by display_image — same validatePath rules
+router.get('/api/image', (req, res) => {
+  const imgPath = req.query.path;
+  if (!imgPath) return res.status(400).json({ error: 'Missing path' });
+  try {
+    const resolved = validatePath(imgPath);
+    const ext = path.extname(resolved).toLowerCase();
+    if (!IMAGE_EXTS.has(ext)) {
+      return res.status(400).json({ error: 'Not an image file' });
+    }
+    const mime = MIME_BY_EXT[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    fs.createReadStream(resolved).pipe(res);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // --- File browsing API ---

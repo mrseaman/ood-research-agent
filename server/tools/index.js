@@ -1,8 +1,8 @@
 'use strict';
 
-const { readFile, writeFile, listFiles } = require('./file-ops');
+const { readFile, writeFile, listFiles, displayImage } = require('./file-ops');
 const { submitJob, checkJob } = require('./job-ops');
-const { runCommand, runShell } = require('./command-ops');
+const { runShell } = require('./command-ops');
 const { webSearch } = require('./web-search');
 const { fetchUrl } = require('./web-fetch');
 const { searchPapers, getPaper } = require('./paper-search');
@@ -35,6 +35,21 @@ const toolDefinitions = [
           content: { type: 'string', description: 'Content to write' },
         },
         required: ['path', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'display_image',
+      description: 'Display an image (PNG, JPG, GIF, WebP, SVG, BMP) from the cluster filesystem inline in the chat. Use this when the user asks to see a plot, snapshot, or rendered figure. The path must be within the user\'s allowed filesystem.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Image file path (supports ~)' },
+          caption: { type: 'string', description: 'Optional short caption shown under the image' },
+        },
+        required: ['path'],
       },
     },
   },
@@ -86,26 +101,12 @@ const toolDefinitions = [
   {
     type: 'function',
     function: {
-      name: 'run_command',
-      description: 'Run a safe shell command directly (no shell operators). Supports: ls, cat, head, tail, grep, find, wc, sort, uniq, cut, sed, awk, mkdir, cp, mv, rm, touch, chmod, tar, gzip, zip, unzip, python3, pip3, conda, curl, wget, ps, kill, du, df, free, module, squeue, sbatch, sacct, sinfo, and more. For commands with pipes (|), chaining (&&), or redirection (>), use run_shell instead.',
-      parameters: {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'Command to run (e.g., "ls -la ~/vasp")' },
-        },
-        required: ['command'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'run_shell',
-      description: 'Run an arbitrary shell command through bash. Supports pipes (|), chaining (&&, ||), redirection (>, >>), subshells, and all shell features. REQUIRES USER CONFIRMATION before execution. Use run_command for simple commands that do not need confirmation.',
+      description: 'Run a command in a login bash shell on the cluster. Supports pipes (|), chaining (&&, ||), redirection (>, >>), subshells, environment modules, conda, and the user\'s full PATH. Plain read-only commands (ls, cat, grep, squeue, module, etc.) run without prompting; anything with shell operators or outside the auto-approve list requires the user to confirm.',
       parameters: {
         type: 'object',
         properties: {
-          command: { type: 'string', description: 'Shell command to run (e.g., "grep error log.txt | sort | uniq -c | sort -rn")' },
+          command: { type: 'string', description: 'Shell command to run (e.g., "module load vasp && squeue -u $USER")' },
         },
         required: ['command'],
       },
@@ -179,9 +180,9 @@ const toolHandlers = {
   read_file: readFile,
   write_file: writeFile,
   list_files: listFiles,
+  display_image: displayImage,
   submit_job: submitJob,
   check_job: checkJob,
-  run_command: runCommand,
   run_shell: runShell,
   web_search: webSearch,
   fetch_url: fetchUrl,

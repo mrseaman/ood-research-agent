@@ -9,7 +9,7 @@ export default function ThinkingBlock({ content }) {
   return (
     <div className="thinking-block">
       <button
-        className="thinking-toggle"
+        className="thinking-toggle-btn"
         onClick={() => setExpanded(!expanded)}
       >
         <span className="thinking-icon">{expanded ? '\u25BC' : '\u25B6'}</span>

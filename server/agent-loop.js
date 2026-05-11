@@ -5,6 +5,17 @@ const path = require('path');
 const { streamChat } = require('./llm-client');
 const { getSystemPrompt } = require('./system-prompt');
 const { toolDefinitions, executeTool, getToolSubset } = require('./tools');
+
+const WEB_TOOL_NAMES = new Set(['web_search', 'fetch_url', 'search_papers', 'get_paper', 'search_wos']);
+const WEB_AGENT_NAMES = new Set(['web_research', 'literature']);
+
+function filterToolsForWebSearch(tools, webSearchEnabled) {
+  if (webSearchEnabled) return tools;
+  return tools.filter(td => {
+    const name = td.function?.name;
+    return !WEB_TOOL_NAMES.has(name) && !WEB_AGENT_NAMES.has(name);
+  });
+}
 const { confirmations } = require('./confirmations');
 const config = require('./config');
 
@@ -56,9 +67,10 @@ async function runLLMLoop(res, messages, tools, modelConfig, maxIterations, time
         const delta = choice.delta || {};
         finishReason = choice.finish_reason || finishReason;
 
-        if (delta.reasoning_content) {
-          reasoningContent += delta.reasoning_content;
-          sendSSE(res, 'reasoning', { text: delta.reasoning_content });
+        const reasoningDelta = delta.reasoning_content || delta.reasoning;
+        if (reasoningDelta) {
+          reasoningContent += reasoningDelta;
+          sendSSE(res, 'reasoning', { text: reasoningDelta });
         }
 
         if (delta.content) {
@@ -177,7 +189,7 @@ async function runLLMLoop(res, messages, tools, modelConfig, maxIterations, time
 
 const agentConfigs = {
   files_and_compute: {
-    tools: ['read_file', 'write_file', 'list_files', 'run_command', 'run_shell', 'submit_job', 'check_job'],
+    tools: ['read_file', 'write_file', 'list_files', 'display_image', 'run_shell', 'submit_job', 'check_job'],
     buildSystemPrompt(userMessages) {
       // Reuse skill system — match against original user messages
       const { getSkillPrompt } = require('./skills');
@@ -187,8 +199,8 @@ const agentConfigs = {
 
 ## Your Tools
 - read_file, write_file, list_files — filesystem operations
-- run_command — safe commands (no shell operators)
-- run_shell — arbitrary bash (requires user confirmation)
+- display_image — show an image file (.png/.jpg/.gif/.webp/.svg/.bmp) inline in the chat. Use whenever the user asks to see a plot or rendered figure.
+- run_shell — run any shell command on the cluster (login shell with user PATH, modules, conda). Read-only commands run silently; anything else asks the user to confirm.
 - submit_job, check_job — HPC scheduler operations
 
 ## Environment
@@ -250,25 +262,15 @@ const agentConfigs = {
 /**
  * Build the orchestrator system prompt.
  */
-function getOrchestratorPrompt() {
+function getOrchestratorPrompt(options = {}) {
   const os = require('os');
   const { branding } = config;
   const { appName, appNameZh, appOrg } = branding;
   const nameStr = appNameZh ? `${appName} (${appNameZh})` : appName;
   const orgStr = appOrg ? ` developed for ${appOrg}` : '';
+  const webEnabled = !!options.webSearch;
 
-  return `You are ${nameStr}, an AI research agent${orgStr}. You help researchers with scientific Q&A, literature review, and setting up computational simulations on HPC clusters.
-
-You work by delegating tasks to specialized agents. For simple factual questions you already know, answer directly without delegating.
-
-## Available Agents
-
-### files_and_compute
-Handles filesystem operations, file editing, command execution, simulation file preparation, and HPC job management. Delegate to this agent when the user needs to:
-- Read, write, or list files
-- Run commands or shell scripts
-- Submit or check HPC jobs
-- Prepare simulation input files (VASP, LAMMPS, GROMACS, etc.)
+  const webAgentSections = webEnabled ? `
 
 ### web_research
 Handles web searching and content fetching. Delegate to this agent when the user needs to:
@@ -282,7 +284,23 @@ Handles academic paper search and literature review. Has access to Web of Scienc
 - Review literature and summarize findings
 - Look up specific papers by DOI or title
 - Analyze citation patterns or research trends
-- Check journal impact factors or JCR quartiles
+- Check journal impact factors or JCR quartiles` : `
+
+Note: Web search and literature search are currently disabled by the user. Do not attempt to fetch external information or search the web; answer from your own knowledge or delegate to files_and_compute only. If the request requires online lookup, tell the user to enable the web-search toggle.`;
+
+  return `You are ${nameStr}, an AI research agent${orgStr}. You help researchers with scientific Q&A, literature review, and setting up computational simulations on HPC clusters.
+
+You work by delegating tasks to specialized agents. For simple factual questions you already know, answer directly without delegating.
+
+## Available Agents
+
+### files_and_compute
+Handles filesystem operations, file editing, command execution, simulation file preparation, and HPC job management. Delegate to this agent when the user needs to:
+- Read, write, or list files
+- Run commands or shell scripts
+- Submit or check HPC jobs
+- Prepare simulation input files (VASP, LAMMPS, GROMACS, etc.)
+${webAgentSections}
 
 ## How to Delegate
 - Call an agent tool with a clear task description
@@ -360,7 +378,7 @@ async function runSubAgent(agentName, task, res, userMessages, modelConfig, opti
   // Check for per-agent model override
   const agentModelConfig = config.getAgentModel(agentName) || modelConfig;
 
-  const tools = getToolSubset(agentDef.tools);
+  const tools = filterToolsForWebSearch(getToolSubset(agentDef.tools), !!options.webSearch);
   const systemPrompt = agentDef.buildSystemPrompt(userMessages);
   const maxIter = config.agentMaxIterations;
 
@@ -400,9 +418,9 @@ async function runAgentLoop(res, userMessages, modelId, options = {}) {
   try {
   if (config.agentMode === 'multi') {
     // --- Multi-agent: orchestrator + sub-agents ---
-    const systemMessage = { role: 'system', content: getOrchestratorPrompt() };
+    const systemMessage = { role: 'system', content: getOrchestratorPrompt(options) };
     const messages = [systemMessage, ...userMessages];
-    const agentTools = getAgentToolDefinitions();
+    const agentTools = filterToolsForWebSearch(getAgentToolDefinitions(), !!options.webSearch);
 
     let iteration = 0;
     const maxIterations = config.maxToolIterations;
@@ -433,9 +451,10 @@ async function runAgentLoop(res, userMessages, modelId, options = {}) {
           const delta = choice.delta || {};
           finishReason = choice.finish_reason || finishReason;
 
-          if (delta.reasoning_content) {
-            reasoningContent += delta.reasoning_content;
-            sendSSE(res, 'reasoning', { text: delta.reasoning_content });
+          const reasoningDelta = delta.reasoning_content || delta.reasoning;
+          if (reasoningDelta) {
+            reasoningContent += reasoningDelta;
+            sendSSE(res, 'reasoning', { text: reasoningDelta });
           }
 
           if (delta.content) {
@@ -521,9 +540,10 @@ async function runAgentLoop(res, userMessages, modelId, options = {}) {
     }
   } else {
     // --- Single-agent: original behavior ---
-    const systemMessage = { role: 'system', content: getSystemPrompt(userMessages) };
+    const systemMessage = { role: 'system', content: getSystemPrompt(userMessages, options) };
     const messages = [systemMessage, ...userMessages];
-    await runLLMLoop(res, messages, toolDefinitions, modelConfig, config.maxToolIterations, 120000, options);
+    const singleTools = filterToolsForWebSearch(toolDefinitions, !!options.webSearch);
+    await runLLMLoop(res, messages, singleTools, modelConfig, config.maxToolIterations, 120000, options);
   }
   } finally {
     clearInterval(globalHeartbeat);

@@ -11,7 +11,7 @@ const { getSkillPrompt, listSkills } = require('./skills');
  *
  * @param {Array} messages - conversation messages (used for skill matching)
  */
-function getSystemPrompt(messages) {
+function getSystemPrompt(messages, options = {}) {
   const homeDir = os.homedir();
   const user = os.userInfo().username;
 
@@ -33,7 +33,7 @@ function getSystemPrompt(messages) {
 - Read, write, and list files on the user's filesystem
 - Generate and review simulation input files (DFT, MD, CFD, FEM, and more)
 - Submit and check jobs via the cluster's scheduler
-- Run allowlisted commands (ls, cat, head, tail, grep, find, module, squeue, qstat, sacct)
+- Run shell commands on the cluster via run_shell (login shell with the user's PATH, modules, and conda; read-only commands run silently, anything else asks the user to confirm)
 
 ## Available Simulation Skills
 The following domain-specific skills can be activated when needed:
@@ -55,7 +55,8 @@ When a user's query relates to a specific simulation software, detailed domain k
 - Provide explanations for parameter choices
 - For file paths, resolve ~ to ${homeDir}
 - When answering general research questions, be thorough and cite relevant concepts
-- If unsure about specific software details, say so rather than guessing${skillPrompt}`;
+- If unsure about specific software details, say so rather than guessing${options.webSearch === false ? `
+- Web search and paper search are currently disabled by the user. Do not claim you searched the web; if a question needs online lookup, tell the user to enable the web-search toggle and answer from your own knowledge otherwise.` : ''}${skillPrompt}`;
 }
 
 module.exports = { getSystemPrompt };

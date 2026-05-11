@@ -3,7 +3,6 @@ import { apiFetch } from '../lib/api';
 import { t } from '../lib/i18n';
 
 export default function FileBrowser({ onFileSelect }) {
-  const [currentPath, setCurrentPath] = useState('~');
   const [entries, setEntries] = useState([]);
   const [resolvedPath, setResolvedPath] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,7 +13,6 @@ export default function FileBrowser({ onFileSelect }) {
       const data = await apiFetch(`/api/files?path=${encodeURIComponent(dirPath)}`);
       setEntries(data.entries);
       setResolvedPath(data.path);
-      setCurrentPath(dirPath);
     } catch {
       setEntries([]);
     }
@@ -33,12 +31,12 @@ export default function FileBrowser({ onFileSelect }) {
   return (
     <div className="file-browser">
       <div className="file-browser-header">
-        <button className="btn-small" onClick={goUp}>{t('up')}</button>
+        <button className="file-browser-up" onClick={goUp} title={t('up')}>↑</button>
         <span className="file-browser-path" title={resolvedPath}>{resolvedPath}</span>
       </div>
       <div className="file-browser-list">
-        {loading && <div>{t('loading')}</div>}
-        {entries.map((e, i) => (
+        {loading && <div className="sidebar-empty">{t('loading')}</div>}
+        {!loading && entries.map((e, i) => (
           <div
             key={i}
             className={`file-entry ${e.type}`}
@@ -49,8 +47,11 @@ export default function FileBrowser({ onFileSelect }) {
                 onFileSelect?.(e.path);
               }
             }}
+            title={e.name}
           >
-            <span className="file-icon">{e.type === 'directory' ? '&#128193;' : '&#128196;'}</span>
+            <span className="file-icon" aria-hidden="true">
+              {e.type === 'directory' ? '\u{1F4C1}' : '\u{1F4C4}'}
+            </span>
             <span className="file-name">{e.name}</span>
           </div>
         ))}

@@ -16,6 +16,7 @@ const translations = {
     thinking: 'Thinking...',
     copy: 'Copy',
     copied: 'Copied!',
+    download: 'Download',
     stop: 'Stop',
     send: 'Send',
     up: '\u2191 Up',
@@ -34,6 +35,7 @@ const translations = {
     approveAll: 'Approve All',
     deny: 'Deny',
     thinkingMode: 'Thinking',
+    webSearch: 'Web Search',
   },
   'zh-CN': {
     appName: branding.appNameZh || branding.appName || '\u79d1\u7814\u52a9\u624b',
@@ -48,6 +50,7 @@ const translations = {
     thinking: '\u601d\u8003\u4e2d...',
     copy: '\u590d\u5236',
     copied: '\u5df2\u590d\u5236',
+    download: '\u4e0b\u8f7d',
     stop: '\u505c\u6b62',
     send: '\u53d1\u9001',
     up: '\u2191 \u4e0a\u7ea7',
@@ -66,10 +69,19 @@ const translations = {
     approveAll: '\u5168\u90e8\u6279\u51c6',
     deny: '\u62d2\u7edd',
     thinkingMode: '\u601d\u8003',
+    webSearch: '\u8054\u7f51\u641c\u7d22',
   },
 };
 
+const LOCALE_STORAGE_KEY = 'ra-locale';
+
 function detectLocale() {
+  // Manual override stored from the language selector
+  try {
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (stored && translations[stored]) return stored;
+  } catch {}
+
   // URL param override
   const params = new URLSearchParams(window.location.search);
   const urlLocale = params.get('lang');
@@ -91,6 +103,19 @@ export function t(key) {
 
 export function getLocale() {
   return currentLocale;
+}
+
+export function getAvailableLocales() {
+  return [
+    { id: 'en', name: 'English' },
+    { id: 'zh-CN', name: '中文' },
+  ];
+}
+
+export function setLocale(locale) {
+  if (!translations[locale]) return;
+  try { localStorage.setItem(LOCALE_STORAGE_KEY, locale); } catch {}
+  window.location.reload();
 }
 
 export const I18nContext = createContext({ t, locale: currentLocale });

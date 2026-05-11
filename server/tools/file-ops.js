@@ -6,6 +6,9 @@ const os = require('os');
 const config = require('../config');
 
 function resolvePath(p) {
+  if (typeof p !== 'string' || !p.trim()) {
+    throw new Error('Missing required argument: path');
+  }
   if (p.startsWith('~')) {
     p = path.join(os.homedir(), p.slice(1));
   }
@@ -31,12 +34,15 @@ async function readFile({ path: filePath }) {
   const resolved = validatePath(filePath);
   const stat = fs.statSync(resolved);
   if (stat.size > config.maxFileSize) {
-    return `Error: File too large (${stat.size} bytes). Max allowed: ${config.maxFileSize} bytes. Use head/tail via run_command to read portions.`;
+    return `Error: File too large (${stat.size} bytes). Max allowed: ${config.maxFileSize} bytes. Use head/tail via run_shell to read portions.`;
   }
   return fs.readFileSync(resolved, 'utf8');
 }
 
 async function writeFile({ path: filePath, content }) {
+  if (typeof content !== 'string') {
+    throw new Error('Missing required argument: content (must be a string)');
+  }
   const resolved = validatePath(filePath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   fs.writeFileSync(resolved, content, 'utf8');
@@ -61,4 +67,30 @@ async function listFiles({ directory, pattern }) {
   return results.map(r => `${r.type === 'directory' ? '[DIR]' : '[FILE]'} ${r.name}`).join('\n') || '(empty directory)';
 }
 
-module.exports = { readFile, writeFile, listFiles, resolvePath, validatePath };
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp']);
+const MIME_BY_EXT = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+};
+
+async function displayImage({ path: filePath, caption }) {
+  const resolved = validatePath(filePath);
+  const ext = path.extname(resolved).toLowerCase();
+  if (!IMAGE_EXTS.has(ext)) {
+    throw new Error(`Not a supported image format (${ext}). Supported: ${[...IMAGE_EXTS].join(', ')}`);
+  }
+  const stat = fs.statSync(resolved);
+  if (!stat.isFile()) {
+    throw new Error(`Not a file: ${resolved}`);
+  }
+  const kb = Math.round(stat.size / 1024);
+  const captionStr = caption ? ` — ${caption}` : '';
+  return `Image displayed: ${resolved} (${kb} KB)${captionStr}`;
+}
+
+module.exports = { readFile, writeFile, listFiles, displayImage, resolvePath, validatePath, IMAGE_EXTS, MIME_BY_EXT };

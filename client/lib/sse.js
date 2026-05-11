@@ -1,4 +1,4 @@
-import { getBaseURI, getCsrfToken } from './api';
+import { getBaseURI, getCsrfToken, refreshCsrfToken } from './api';
 
 /**
  * Send a chat request and read the SSE stream.
@@ -6,14 +6,15 @@ import { getBaseURI, getCsrfToken } from './api';
  * @param {Object} callbacks - { onReasoning, onContent, onToolCall, onToolResult, onError, onDone }
  * @param {AbortSignal} [signal] - optional abort signal
  */
-export async function streamChat(messages, callbacks, signal, modelId, thinking) {
+export async function streamChat(messages, callbacks, signal, modelId, thinking, webSearch) {
   const url = `${getBaseURI()}/api/chat`;
 
   const body = { messages };
   if (modelId) body.modelId = modelId;
   if (thinking !== undefined) body.thinking = !!thinking;
+  if (webSearch !== undefined) body.webSearch = !!webSearch;
 
-  const response = await fetch(url, {
+  const doFetch = () => fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -22,6 +23,19 @@ export async function streamChat(messages, callbacks, signal, modelId, thinking)
     body: JSON.stringify(body),
     signal,
   });
+
+  let response = await doFetch();
+
+  // Retry once with a fresh CSRF token if the cached one expired (e.g. after Passenger restart)
+  if (response.status === 403) {
+    const text = await response.text();
+    if (text.includes('CSRF') && await refreshCsrfToken()) {
+      response = await doFetch();
+    } else {
+      callbacks.onError?.(`HTTP ${response.status}: ${text}`);
+      return;
+    }
+  }
 
   if (!response.ok) {
     const text = await response.text();

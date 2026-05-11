@@ -2,12 +2,22 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ChatView from './components/ChatView';
 import InputBar from './components/InputBar';
 import SessionSidebar from './components/SessionSidebar';
+import FileBrowser from './components/FileBrowser';
 import { streamChat } from './lib/sse';
-import { apiFetch, getBaseURI, getCsrfToken } from './lib/api';
-import { t } from './lib/i18n';
+import { apiFetch } from './lib/api';
+import { t, getLocale, setLocale, getAvailableLocales } from './lib/i18n';
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function getInitialTheme() {
+  try {
+    const stored = localStorage.getItem('ra-theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  } catch {}
+  return 'light';
 }
 
 export default function App() {
@@ -15,17 +25,23 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState(generateId);
   const [sessionTitle, setSessionTitle] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [activeAgent, setActiveAgent] = useState(null);
   const [thinking, setThinking] = useState(true);
+  const [webSearch, setWebSearch] = useState(false);
   const [autoApproveShell, setAutoApproveShell] = useState(false);
+  const [theme, setTheme] = useState(getInitialTheme);
   const abortRef = useRef(null);
   const autoApproveRef = useRef(false);
 
   useEffect(() => { autoApproveRef.current = autoApproveShell; }, [autoApproveShell]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('ra-theme', theme); } catch {}
+  }, [theme]);
 
   // Fetch available models on mount
   useEffect(() => {
@@ -59,21 +75,18 @@ export default function App() {
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
 
-    // Set title from first message
     if (!sessionTitle) {
       setSessionTitle(text.slice(0, 60));
     }
 
-    // Create placeholder for assistant response
     const assistantMsg = {
       role: 'assistant',
       content: '',
       reasoning: '',
       toolCalls: [],
       toolResults: {},
-      parts: [],  // ordered sequence of { type, content/toolCall/result }
+      parts: [],
     };
-    // Track which part type we're currently appending to
     let currentPartType = null;
 
     setMessages([...updatedMessages, assistantMsg]);
@@ -82,7 +95,6 @@ export default function App() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Build messages for API: reconstruct proper OpenAI-format history
     const apiMessages = [];
     for (const m of updatedMessages) {
       if (m.role === 'user') {
@@ -91,7 +103,6 @@ export default function App() {
         const msg = { role: 'assistant' };
         msg.content = m.content || '';
         if (m.reasoning) msg.reasoning_content = m.reasoning;
-        // Include tool calls if any
         if (m.toolCalls && m.toolCalls.length > 0) {
           msg.tool_calls = m.toolCalls.map(tc => ({
             id: tc.id,
@@ -100,7 +111,6 @@ export default function App() {
           }));
         }
         apiMessages.push(msg);
-        // Append tool results as separate messages
         if (m.toolCalls && m.toolCalls.length > 0 && m.toolResults) {
           for (const tc of m.toolCalls) {
             const tr = m.toolResults[tc.id];
@@ -120,7 +130,6 @@ export default function App() {
       await streamChat(apiMessages, {
         onReasoning(text) {
           assistantMsg.reasoning += text;
-          // Append to current reasoning part or create a new one
           if (currentPartType !== 'reasoning') {
             assistantMsg.parts.push({ type: 'reasoning', content: '' });
             currentPartType = 'reasoning';
@@ -145,36 +154,28 @@ export default function App() {
         },
         onToolResult(data) {
           assistantMsg.toolResults[data.id] = data;
-          // Update the matching toolCall part with result
           const part = assistantMsg.parts.find(p => p.type === 'toolCall' && p.toolCall?.id === data.id);
           if (part) part.result = data;
           setMessages(prev => [...prev.slice(0, -1), { ...assistantMsg, parts: [...assistantMsg.parts] }]);
         },
         onToolConfirm(data) {
           if (autoApproveRef.current) {
-            fetch(`${getBaseURI()}/api/confirm/${data.id}`, {
+            apiFetch(`/api/confirm/${data.id}`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
               body: JSON.stringify({ approved: true }),
             }).catch(() => {});
           } else {
             setPendingConfirm(data);
           }
         },
-        onAgentStart(data) {
-          setActiveAgent(data.agent);
-        },
-        onAgentEnd() {
-          setActiveAgent(null);
-        },
+        onAgentStart(data) { setActiveAgent(data.agent); },
+        onAgentEnd() { setActiveAgent(null); },
         onError(text) {
           assistantMsg.content += `\n\n**${t('error')}** ${text}`;
           setMessages(prev => [...prev.slice(0, -1), { ...assistantMsg }]);
         },
-        onDone() {
-          // handled in finally
-        },
-      }, controller.signal, selectedModel, thinking);
+        onDone() {},
+      }, controller.signal, selectedModel, thinking, webSearch);
     } catch (err) {
       if (err.name !== 'AbortError') {
         assistantMsg.content += `\n\n**${t('error')}** ${err.message}`;
@@ -185,20 +186,15 @@ export default function App() {
       abortRef.current = null;
     }
 
-    // Save session
     const finalMessages = [...updatedMessages, assistantMsg];
     saveSession(finalMessages, sessionTitle || text.slice(0, 60));
-  }, [messages, isStreaming, sessionTitle, saveSession, selectedModel, thinking]);
+  }, [messages, isStreaming, sessionTitle, saveSession, selectedModel, thinking, webSearch]);
 
   const handleConfirm = useCallback(async (id, approved) => {
     setPendingConfirm(null);
     try {
-      await fetch(`${getBaseURI()}/api/confirm/${id}`, {
+      await apiFetch(`/api/confirm/${id}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': getCsrfToken(),
-        },
         body: JSON.stringify({ approved }),
       });
     } catch (err) {
@@ -225,56 +221,88 @@ export default function App() {
       setSessionId(session.id);
       setSessionTitle(session.title || '');
       setMessages(session.messages || []);
-      setSidebarOpen(false);
     } catch (err) {
       console.error('Failed to load session:', err);
     }
   }, []);
 
+  const appName = t('appName');
+  const initial = (appName || 'R').trim().charAt(0).toUpperCase();
+
   return (
     <div className="app">
-      <header className="app-header">
-        <button className="btn-icon" onClick={() => setSidebarOpen(!sidebarOpen)} title={t('sessions')}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            <rect x="2" y="3" width="16" height="2" rx="1"/>
-            <rect x="2" y="9" width="16" height="2" rx="1"/>
-            <rect x="2" y="15" width="16" height="2" rx="1"/>
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <div className="sidebar-logo">{initial}</div>
+          <h2>{appName}</h2>
+        </div>
+
+        <button className="sidebar-new-chat" onClick={handleNewChat}>
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M10 3a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H4a1 1 0 1 1 0-2h5V4a1 1 0 0 1 1-1z"/>
           </svg>
+          {t('newChat')}
         </button>
-        <h1>{t('appName')}</h1>
-        {models.length > 1 && (
+
+        <div className="sidebar-sections">
+          <div className="sidebar-section expand">
+            <div className="sidebar-section-title">{t('sessions')}</div>
+            <SessionSidebar currentId={sessionId} onSelect={handleLoadSession} />
+          </div>
+          <div className="sidebar-section expand">
+            <div className="sidebar-section-title">{t('files') || 'Files'}</div>
+            <FileBrowser />
+          </div>
+        </div>
+
+        <div className="sidebar-footer">
           <select
-            className="model-select"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            disabled={isStreaming}
+            className="locale-select"
+            value={getLocale()}
+            onChange={(e) => setLocale(e.target.value)}
+            aria-label="Language"
           >
-            {models.map(m => (
-              <option key={m.id} value={m.id}>{m.name}</option>
+            {getAvailableLocales().map(l => (
+              <option key={l.id} value={l.id}>{l.name}</option>
             ))}
           </select>
-        )}
-        <label className="thinking-toggle" title={t('thinkingMode')}>
-          <input
-            type="checkbox"
-            checked={thinking}
-            onChange={(e) => setThinking(e.target.checked)}
-            disabled={isStreaming}
-          />
-          <span>{t('thinkingMode')}</span>
-        </label>
-        <button className="btn-new" onClick={handleNewChat}>{t('newChat')}</button>
-      </header>
+          <button
+            className="icon-btn"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+            )}
+          </button>
+        </div>
+      </aside>
 
-      <div className="app-body">
-        {sidebarOpen && (
-          <SessionSidebar
-            currentId={sessionId}
-            onSelect={handleLoadSession}
-            onClose={() => setSidebarOpen(false)}
-          />
+      <main className="chat-main">
+        {models.length > 1 && (
+          <div className="chat-toolbar">
+            <select
+              className="model-select"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={isStreaming}
+            >
+              {models.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
         )}
-        <main className="chat-main">
+
+        <div className="chat-card">
           <ChatView messages={messages} />
           {isStreaming && (
             <div className="streaming-indicator">
@@ -287,32 +315,41 @@ export default function App() {
                 : t('thinking') || 'Thinking...'}
             </div>
           )}
-          <InputBar onSend={handleSend} onStop={handleStop} isStreaming={isStreaming} />
-          {pendingConfirm && (
-            <div className="confirm-overlay">
-              <div className="confirm-dialog">
-                <h3>{t('confirmTitle') || 'Command Requires Approval'}</h3>
-                <p>{t('confirmDesc') || 'The assistant wants to run the following shell command:'}</p>
-                <pre className="confirm-command">{pendingConfirm.command}</pre>
-                <div className="confirm-actions">
-                  <button className="btn-approve" onClick={() => handleConfirm(pendingConfirm.id, true)}>
-                    {t('approve') || 'Approve'}
-                  </button>
-                  <button className="btn-approve-all" onClick={() => {
-                    setAutoApproveShell(true);
-                    handleConfirm(pendingConfirm.id, true);
-                  }}>
-                    {t('approveAll') || 'Approve All'}
-                  </button>
-                  <button className="btn-deny" onClick={() => handleConfirm(pendingConfirm.id, false)}>
-                    {t('deny') || 'Deny'}
-                  </button>
-                </div>
+          <InputBar
+            onSend={handleSend}
+            onStop={handleStop}
+            isStreaming={isStreaming}
+            thinking={thinking}
+            onThinkingChange={setThinking}
+            webSearch={webSearch}
+            onWebSearchChange={setWebSearch}
+          />
+        </div>
+
+        {pendingConfirm && (
+          <div className="confirm-overlay">
+            <div className="confirm-dialog">
+              <h3>{t('confirmTitle') || 'Command Requires Approval'}</h3>
+              <p>{t('confirmDesc') || 'The assistant wants to run the following shell command:'}</p>
+              <pre className="confirm-command">{pendingConfirm.command}</pre>
+              <div className="confirm-actions">
+                <button className="btn-approve" onClick={() => handleConfirm(pendingConfirm.id, true)}>
+                  {t('approve') || 'Approve'}
+                </button>
+                <button className="btn-approve-all" onClick={() => {
+                  setAutoApproveShell(true);
+                  handleConfirm(pendingConfirm.id, true);
+                }}>
+                  {t('approveAll') || 'Approve All'}
+                </button>
+                <button className="btn-deny" onClick={() => handleConfirm(pendingConfirm.id, false)}>
+                  {t('deny') || 'Deny'}
+                </button>
               </div>
             </div>
-          )}
-        </main>
-      </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
