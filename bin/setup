@@ -4,7 +4,7 @@ set -e
 APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$APP_ROOT"
 
-echo "== Building Research Assistant =="
+echo "== Building Research Agent =="
 
 echo "== Installing dependencies =="
 npm install --production

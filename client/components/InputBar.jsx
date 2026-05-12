@@ -36,10 +36,17 @@ export default function InputBar({ onSend, onStop, isStreaming, thinking, onThin
 
   const showThinkingPill = typeof thinking === 'boolean' && typeof onThinkingChange === 'function';
   const showWebSearchPill = typeof webSearch === 'boolean' && typeof onWebSearchChange === 'function';
+  const bangMode = text.startsWith('!');
 
   return (
     <form className="input-bar" onSubmit={handleSubmit}>
-      <div className="input-bar-inner">
+      <div className={`input-bar-inner ${bangMode ? 'bang-mode' : ''}`}>
+        {bangMode && (
+          <div className="bang-mode-hint">
+            <span className="bang-mode-tag">bash</span>
+            <span>Runs directly on the cluster (no LLM). Denylist still applies.</span>
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           value={text}

@@ -78,7 +78,15 @@ const config = {
 };
 
 config.getModel = function(modelId) {
-  return models.find(m => m.id === modelId) || models[0];
+  const admin = models.find(m => m.id === modelId);
+  if (admin) return admin;
+  // Fall back to the user-configured models file at ~/.research-agent/config/models.json
+  try {
+    const userModels = require('./user-models');
+    const u = userModels.getModelById(modelId);
+    if (u) return u;
+  } catch {}
+  return models[0];
 };
 
 /**

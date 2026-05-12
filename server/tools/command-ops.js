@@ -26,6 +26,27 @@ try {
   console.warn('Could not capture login-shell env:', err.message);
 }
 
+// Scrub secrets before exposing the env to shell commands. The Passenger
+// pun_custom_env block injects RA_MODEL_*_TOKEN, RA_SEARCH_API_KEY, etc., and
+// proxy URLs that embed user:pass. Users running `!env` or arbitrary shell
+// commands must not see any of that.
+const SECRET_KEY_RE = /(TOKEN|API_KEY|APIKEY|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|BEARER|ACCESS_KEY|CSRF)$/i;
+function scrubEnvForShell(env) {
+  const out = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (SECRET_KEY_RE.test(k)) continue;
+    if (k === 'RA_WOS_USERNAME') continue; // paired with the password — strip together
+    if ((k === 'http_proxy' || k === 'https_proxy' || k === 'HTTP_PROXY' || k === 'HTTPS_PROXY') && typeof v === 'string') {
+      // Keep the host:port, drop embedded credentials so curl/git still work.
+      out[k] = v.replace(/(\w+:\/\/)[^@\/]*@/, '$1');
+      continue;
+    }
+    out[k] = v;
+  }
+  return out;
+}
+USER_ENV = scrubEnvForShell(USER_ENV);
+
 // Hard denylist — never executed even after user approval.
 const BLOCKED_PATTERNS = [
   /\brm\s+(-rf?|--recursive)\s+[\/~]/, // rm -rf / or ~

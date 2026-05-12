@@ -36,6 +36,8 @@ const translations = {
     deny: 'Deny',
     thinkingMode: 'Thinking',
     webSearch: 'Web Search',
+    systemModels: 'System',
+    yourModels: 'Your models',
   },
   'zh-CN': {
     appName: branding.appNameZh || branding.appName || '\u79d1\u7814\u52a9\u624b',
@@ -70,6 +72,8 @@ const translations = {
     deny: '\u62d2\u7edd',
     thinkingMode: '\u601d\u8003',
     webSearch: '\u8054\u7f51\u641c\u7d22',
+    systemModels: '\u7cfb\u7edf',
+    yourModels: '\u6211\u7684\u6a21\u578b',
   },
 };
 

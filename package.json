@@ -1,7 +1,20 @@
 {
   "name": "research-agent",
   "version": "0.1.0",
+  "description": "Multi-agent AI research assistant for HPC clusters, deployed via Open OnDemand",
   "main": "app.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrseaman/ood-research-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mrseaman/ood-research-agent/issues"
+  },
+  "homepage": "https://github.com/mrseaman/ood-research-agent#readme",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "csrf": "^3.1.0",
     "dotenv": "^16.3.0",

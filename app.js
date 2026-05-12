@@ -22,6 +22,8 @@ const { confirmations } = require('./server/confirmations');
 const sessions = require('./server/sessions');
 const config = require('./server/config');
 const { validatePath, IMAGE_EXTS, MIME_BY_EXT } = require('./server/tools/file-ops');
+const { runShell } = require('./server/tools/command-ops');
+const userModels = require('./server/user-models');
 
 // CSRF setup — persist secret across Passenger restarts so issued tokens stay valid
 const tokens = new Tokens({});
@@ -78,8 +80,34 @@ router.get('/api/csrf', (req, res) => {
 // --- Models API ---
 
 router.get('/api/models', (req, res) => {
-  const models = config.models.map(m => ({ id: m.id, name: m.name }));
-  res.json({ models, default: config.defaultModelId });
+  const adminModels = config.models.map(m => ({ id: m.id, name: m.name, source: 'admin' }));
+  const user = userModels.listForApi().map(m => ({ id: m.id, name: m.name, source: 'user' }));
+  res.json({ models: [...adminModels, ...user], default: config.defaultModelId });
+});
+
+// --- User model config API ---
+
+router.get('/api/user-models', (req, res) => {
+  res.json({ models: userModels.listForApi() });
+});
+
+router.post('/api/user-models', csrfProtect, (req, res) => {
+  try {
+    const saved = userModels.upsert(req.body || {});
+    res.json({ ok: true, model: saved });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/api/user-models/:id', csrfProtect, (req, res) => {
+  try {
+    const removed = userModels.remove(req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // --- Chat API ---
@@ -115,6 +143,21 @@ router.post('/api/chat', csrfProtect, (req, res) => {
       res.end();
     }
   });
+});
+
+// Direct shell execution for the user's "!" bash mode. User-typed, so
+// confirmed:true is passed straight through; BLOCKED_PATTERNS still applies.
+router.post('/api/run-shell', csrfProtect, async (req, res) => {
+  const { command } = req.body || {};
+  if (typeof command !== 'string' || !command.trim()) {
+    return res.status(400).json({ error: 'Missing command' });
+  }
+  try {
+    const result = await runShell({ command, confirmed: true });
+    res.json({ output: typeof result === 'string' ? result : JSON.stringify(result) });
+  } catch (err) {
+    res.status(200).json({ output: `Error: ${err.message}`, error: true });
+  }
 });
 
 // --- Tool Confirmation API ---

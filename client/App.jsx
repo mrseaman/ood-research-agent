@@ -3,6 +3,7 @@ import ChatView from './components/ChatView';
 import InputBar from './components/InputBar';
 import SessionSidebar from './components/SessionSidebar';
 import FileBrowser from './components/FileBrowser';
+import ModelSettings from './components/ModelSettings';
 import { streamChat } from './lib/sse';
 import { apiFetch } from './lib/api';
 import { t, getLocale, setLocale, getAvailableLocales } from './lib/i18n';
@@ -33,6 +34,7 @@ export default function App() {
   const [webSearch, setWebSearch] = useState(false);
   const [autoApproveShell, setAutoApproveShell] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
   const abortRef = useRef(null);
   const autoApproveRef = useRef(false);
 
@@ -43,15 +45,17 @@ export default function App() {
     try { localStorage.setItem('ra-theme', theme); } catch {}
   }, [theme]);
 
-  // Fetch available models on mount
-  useEffect(() => {
+  const refreshModels = useCallback(() => {
     apiFetch('/api/models')
       .then(data => {
         setModels(data.models || []);
-        setSelectedModel(data.default || (data.models?.[0]?.id) || '');
+        setSelectedModel(prev => prev || data.default || (data.models?.[0]?.id) || '');
       })
       .catch(() => {});
   }, []);
+
+  // Fetch available models on mount
+  useEffect(() => { refreshModels(); }, [refreshModels]);
 
   const saveSession = useCallback(async (msgs, title) => {
     try {
@@ -68,8 +72,42 @@ export default function App() {
     }
   }, [sessionId, sessionTitle]);
 
+  const handleBangShell = useCallback(async (command) => {
+    const userMsg = { role: 'user', content: '!' + command, bang: true };
+    const placeholder = {
+      role: 'assistant',
+      content: '',
+      bang: true,
+      parts: [{ type: 'content', content: '' }],
+    };
+    const updated = [...messages, userMsg, placeholder];
+    setMessages(updated);
+    if (!sessionTitle) setSessionTitle('!' + command.slice(0, 60));
+
+    try {
+      const data = await apiFetch('/api/run-shell', {
+        method: 'POST',
+        body: JSON.stringify({ command }),
+      });
+      placeholder.content = data.output || '(no output)';
+      placeholder.parts = [{ type: 'content', content: '```\n' + placeholder.content + '\n```' }];
+    } catch (err) {
+      placeholder.content = `Error: ${err.message}`;
+      placeholder.parts = [{ type: 'content', content: placeholder.content }];
+    }
+    const finalMessages = [...messages, userMsg, placeholder];
+    setMessages(finalMessages);
+    saveSession(finalMessages);
+  }, [messages, sessionTitle, saveSession]);
+
   const handleSend = useCallback(async (text) => {
     if (isStreaming || !text.trim()) return;
+
+    if (text.startsWith('!')) {
+      const cmd = text.slice(1).trim();
+      if (cmd) return handleBangShell(cmd);
+      return;
+    }
 
     const userMsg = { role: 'user', content: text };
     const updatedMessages = [...messages, userMsg];
@@ -188,7 +226,7 @@ export default function App() {
 
     const finalMessages = [...updatedMessages, assistantMsg];
     saveSession(finalMessages, sessionTitle || text.slice(0, 60));
-  }, [messages, isStreaming, sessionTitle, saveSession, selectedModel, thinking, webSearch]);
+  }, [messages, isStreaming, sessionTitle, saveSession, selectedModel, thinking, webSearch, handleBangShell]);
 
   const handleConfirm = useCallback(async (id, approved) => {
     setPendingConfirm(null);
@@ -268,6 +306,17 @@ export default function App() {
           </select>
           <button
             className="icon-btn"
+            onClick={() => setModelSettingsOpen(true)}
+            title={t('modelSettings') || 'Your models'}
+            aria-label="Model settings"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+          <button
+            className="icon-btn"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
             aria-label="Toggle theme"
@@ -295,9 +344,20 @@ export default function App() {
               onChange={(e) => setSelectedModel(e.target.value)}
               disabled={isStreaming}
             >
-              {models.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              {models.some(m => m.source !== 'user') && (
+                <optgroup label={t('systemModels') || 'System'}>
+                  {models.filter(m => m.source !== 'user').map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {models.some(m => m.source === 'user') && (
+                <optgroup label={t('yourModels') || 'Your models'}>
+                  {models.filter(m => m.source === 'user').map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         )}
@@ -325,6 +385,12 @@ export default function App() {
             onWebSearchChange={setWebSearch}
           />
         </div>
+
+        <ModelSettings
+          open={modelSettingsOpen}
+          onClose={() => setModelSettingsOpen(false)}
+          onChanged={refreshModels}
+        />
 
         {pendingConfirm && (
           <div className="confirm-overlay">
