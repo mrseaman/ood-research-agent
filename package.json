@@ -1,7 +1,27 @@
 {
   "name": "research-agent",
   "version": "0.1.0",
-  "description": "Multi-agent AI research assistant for HPC clusters, deployed via Open OnDemand",
+  "description": "Self-hosted multi-agent AI research assistant for HPC clusters — an Open OnDemand app that submits Slurm/PBS jobs, runs shell commands, and searches the scientific literature via any OpenAI-compatible LLM",
+  "keywords": [
+    "hpc",
+    "open-ondemand",
+    "ood",
+    "slurm",
+    "pbs",
+    "ai-assistant",
+    "ai-agent",
+    "llm",
+    "chatbot",
+    "research-assistant",
+    "scientific-computing",
+    "self-hosted",
+    "openai-compatible",
+    "multi-agent",
+    "vasp",
+    "lammps",
+    "gromacs",
+    "literature-review"
+  ],
   "main": "app.js",
   "license": "MIT",
   "repository": {
