@@ -22,7 +22,7 @@ const { confirmations } = require('./server/confirmations');
 const sessions = require('./server/sessions');
 const config = require('./server/config');
 const { validatePath, IMAGE_EXTS, MIME_BY_EXT } = require('./server/tools/file-ops');
-const { runShell } = require('./server/tools/command-ops');
+const { runShell, setShellCwd } = require('./server/tools/command-ops');
 const userModels = require('./server/user-models');
 
 // CSRF setup — persist secret across Passenger restarts so issued tokens stay valid
@@ -222,6 +222,9 @@ router.get('/api/files', (req, res) => {
   try {
     const resolved = validatePath(dirPath);
     const entries = require('fs').readdirSync(resolved, { withFileTypes: true });
+    // The file browser drives this endpoint; keep the shell's working
+    // directory in lockstep with the directory the user is viewing.
+    setShellCwd(resolved);
     const result = entries.map(e => ({
       name: e.name,
       type: e.isDirectory() ? 'directory' : 'file',
@@ -231,6 +234,48 @@ router.get('/api/files', (req, res) => {
       return a.name.localeCompare(b.name);
     });
     res.json({ path: resolved, entries: result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Text-file preview for the sidebar file browser. Images are served raw by
+// /api/image; this returns JSON so the client can render friendly states for
+// binary / too-large / image files instead of dumping bytes.
+router.get('/api/file', (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath) return res.status(400).json({ error: 'Missing path' });
+  try {
+    const resolved = validatePath(filePath);
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) {
+      return res.status(400).json({ error: 'Path is a directory' });
+    }
+    const ext = path.extname(resolved).toLowerCase();
+    if (IMAGE_EXTS.has(ext)) {
+      // Client should request /api/image for these.
+      return res.json({ path: resolved, kind: 'image', size: stat.size });
+    }
+    const max = config.maxFileSize;
+    const len = Math.min(stat.size, max);
+    const fd = fs.openSync(resolved, 'r');
+    try {
+      const buf = Buffer.alloc(len);
+      if (len > 0) fs.readSync(fd, buf, 0, len, 0);
+      // Crude binary sniff: a NUL byte in the sampled region means not text.
+      if (buf.subarray(0, Math.min(len, 8192)).includes(0)) {
+        return res.json({ path: resolved, kind: 'binary', size: stat.size });
+      }
+      res.json({
+        path: resolved,
+        kind: 'text',
+        content: buf.toString('utf8'),
+        size: stat.size,
+        truncated: stat.size > max,
+      });
+    } finally {
+      fs.closeSync(fd);
+    }
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

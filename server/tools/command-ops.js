@@ -1,8 +1,32 @@
 'use strict';
 
+const fs = require('fs');
 const { execFile, execFileSync } = require('child_process');
 
 const HOME = process.env.HOME || '/';
+
+// The shell's working directory. Tracks whatever directory the file browser
+// is currently showing (set via setShellCwd from the /api/files handler) so
+// that both `!` bash-mode commands and the agent's run_shell tool operate in
+// the directory the user is looking at. Defaults to HOME.
+let shellCwd = HOME;
+
+function setShellCwd(dir) {
+  if (typeof dir === 'string' && dir) shellCwd = dir;
+}
+
+function getShellCwd() {
+  return shellCwd;
+}
+
+// Resolve the cwd to use for a command, falling back to HOME if the tracked
+// directory has since been removed or is no longer a directory.
+function resolveCwd() {
+  try {
+    if (fs.statSync(shellCwd).isDirectory()) return shellCwd;
+  } catch { /* fall through */ }
+  return HOME;
+}
 
 // Capture the user's interactive-shell environment once at startup. Passenger
 // inherits a stripped PATH (only /opt/ood/.../bin + /usr/bin etc.), so a login
@@ -124,7 +148,7 @@ async function runShell({ command, confirmed }) {
     execFile('/bin/bash', ['-lc', trimmed], {
       timeout: 60000,
       maxBuffer: 1024 * 512,
-      cwd: HOME,
+      cwd: resolveCwd(),
       env: USER_ENV,
     }, (err, stdout, stderr) => {
       if (err) {
@@ -140,4 +164,4 @@ async function runShell({ command, confirmed }) {
   });
 }
 
-module.exports = { runShell };
+module.exports = { runShell, setShellCwd, getShellCwd };
