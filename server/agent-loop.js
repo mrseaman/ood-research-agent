@@ -18,6 +18,7 @@ function filterToolsForWebSearch(tools, webSearchEnabled) {
 }
 const { confirmations } = require('./confirmations');
 const config = require('./config');
+const usageLog = require('./usage-log');
 
 const LOG_FILE = path.join(process.env.HOME || '/tmp', '.research-agent', 'agent-debug.log');
 function debugLog(msg) {
@@ -42,10 +43,14 @@ async function runLLMLoop(res, messages, tools, modelConfig, maxIterations, time
   let iteration = 0;
   let lastActivity = Date.now();
   let lastContent = '';
+  const agent = options.agent || 'single';
+  const sessionId = options.sessionId || null;
+  const modelId = modelConfig.id || modelConfig.model || 'unknown';
 
   while (iteration < maxIterations) {
     if (Date.now() - lastActivity > timeout) {
       sendSSE(res, 'error', { text: 'Agent loop timed out.' });
+      usageLog.logEvent({ event: 'error', kind: 'timeout', model: modelId, agent, session_id: sessionId });
       break;
     }
 
@@ -56,11 +61,14 @@ async function runLLMLoop(res, messages, tools, modelConfig, maxIterations, time
     let reasoningContent = '';
     let toolCalls = [];
     let finishReason = null;
+    let usage = null;
+    const callStart = Date.now();
 
     try {
       const stream = streamChat(messages, tools, modelConfig, options);
 
       for await (const chunk of stream) {
+        if (chunk.usage) usage = chunk.usage;
         const choice = chunk.choices && chunk.choices[0];
         if (!choice) continue;
 
@@ -98,8 +106,26 @@ async function runLLMLoop(res, messages, tools, modelConfig, maxIterations, time
       }
     } catch (err) {
       sendSSE(res, 'error', { text: `LLM error: ${err.message}` });
+      usageLog.logEvent({
+        event: 'error',
+        kind: /timeout/i.test(err.message) ? 'timeout' : 'llm_error',
+        model: modelId,
+        agent,
+        session_id: sessionId,
+        duration_ms: Date.now() - callStart,
+      });
       break;
     }
+
+    usageLog.logEvent({
+      event: 'llm_response',
+      model: modelId,
+      agent,
+      session_id: sessionId,
+      tokens_in: usage?.prompt_tokens || 0,
+      tokens_out: usage?.completion_tokens || 0,
+      duration_ms: Date.now() - callStart,
+    });
 
     const assistantMessage = { role: 'assistant' };
     if (assistantContent) assistantMessage.content = assistantContent;
@@ -129,6 +155,7 @@ async function runLLMLoop(res, messages, tools, modelConfig, maxIterations, time
       });
 
       let result;
+      let toolOk = true;
       try {
         // Strip 'confirmed' from LLM args — only the confirmation flow should set this
         delete toolArgs.confirmed;
@@ -156,7 +183,10 @@ async function runLLMLoop(res, messages, tools, modelConfig, maxIterations, time
       } catch (err) {
         debugLog(`[confirm] Error in tool ${toolName}: ${err.message}`);
         result = `Error: ${err.message}`;
+        toolOk = false;
+        usageLog.logEvent({ event: 'error', kind: 'tool_error', tool: toolName, agent, session_id: sessionId });
       }
+      usageLog.logEvent({ event: 'tool_call', tool: toolName, ok: toolOk, agent, session_id: sessionId });
 
       const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
       const truncated = resultStr.length > 50000
@@ -387,7 +417,7 @@ async function runSubAgent(agentName, task, res, userMessages, modelConfig, opti
     { role: 'user', content: task },
   ];
 
-  const result = await runLLMLoop(res, messages, tools, agentModelConfig, maxIter, 120000, options);
+  const result = await runLLMLoop(res, messages, tools, agentModelConfig, maxIter, 120000, { ...options, agent: agentName });
 
   sendSSE(res, 'agent_end', { agent: agentName });
 
@@ -409,6 +439,8 @@ async function runSubAgent(agentName, task, res, userMessages, modelConfig, opti
  */
 async function runAgentLoop(res, userMessages, modelId, options = {}) {
   const modelConfig = config.getModel(modelId);
+  const sessionId = options.sessionId || null;
+  options = { ...options, sessionId };
 
   // Global heartbeat keeps proxy connections alive throughout the entire loop
   const globalHeartbeat = setInterval(() => {
@@ -427,9 +459,11 @@ async function runAgentLoop(res, userMessages, modelId, options = {}) {
     let lastActivity = Date.now();
     const timeout = 120000;
 
+    const orchModelId = modelConfig.id || modelConfig.model || 'unknown';
     while (iteration < maxIterations) {
       if (Date.now() - lastActivity > timeout) {
         sendSSE(res, 'error', { text: 'Orchestrator loop timed out.' });
+        usageLog.logEvent({ event: 'error', kind: 'timeout', model: orchModelId, agent: 'orchestrator', session_id: sessionId });
         break;
       }
 
@@ -440,11 +474,14 @@ async function runAgentLoop(res, userMessages, modelId, options = {}) {
       let reasoningContent = '';
       let toolCalls = [];
       let finishReason = null;
+      let usage = null;
+      const callStart = Date.now();
 
       try {
         const stream = streamChat(messages, agentTools, modelConfig, options);
 
         for await (const chunk of stream) {
+          if (chunk.usage) usage = chunk.usage;
           const choice = chunk.choices && chunk.choices[0];
           if (!choice) continue;
 
@@ -482,8 +519,26 @@ async function runAgentLoop(res, userMessages, modelId, options = {}) {
         }
       } catch (err) {
         sendSSE(res, 'error', { text: `LLM error: ${err.message}` });
+        usageLog.logEvent({
+          event: 'error',
+          kind: /timeout/i.test(err.message) ? 'timeout' : 'llm_error',
+          model: orchModelId,
+          agent: 'orchestrator',
+          session_id: sessionId,
+          duration_ms: Date.now() - callStart,
+        });
         break;
       }
+
+      usageLog.logEvent({
+        event: 'llm_response',
+        model: orchModelId,
+        agent: 'orchestrator',
+        session_id: sessionId,
+        tokens_in: usage?.prompt_tokens || 0,
+        tokens_out: usage?.completion_tokens || 0,
+        duration_ms: Date.now() - callStart,
+      });
 
       const assistantMessage = { role: 'assistant' };
       if (assistantContent) assistantMessage.content = assistantContent;
@@ -543,7 +598,7 @@ async function runAgentLoop(res, userMessages, modelId, options = {}) {
     const systemMessage = { role: 'system', content: getSystemPrompt(userMessages, options) };
     const messages = [systemMessage, ...userMessages];
     const singleTools = filterToolsForWebSearch(toolDefinitions, !!options.webSearch);
-    await runLLMLoop(res, messages, singleTools, modelConfig, config.maxToolIterations, 120000, options);
+    await runLLMLoop(res, messages, singleTools, modelConfig, config.maxToolIterations, 120000, { ...options, agent: 'single' });
   }
   } finally {
     clearInterval(globalHeartbeat);

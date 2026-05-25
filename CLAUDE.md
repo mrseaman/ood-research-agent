@@ -26,13 +26,18 @@ Defaults to "Research Agent" when env vars are not set. Branding flows through:
 app.js                    Express server (Passenger-compatible)
                           Endpoints: /api/chat, /api/run-shell, /api/image,
                           /api/csrf, /api/sessions, /api/files, /api/confirm,
-                          /api/models
+                          /api/models, /api/usage
+bin/
+  usage-report.js         Admin scraper: walks all users' usage logs and
+                          renders per-user / org-wide reports (text/json/html)
 server/
   config.js               Multi-model config from env vars (RA_MODELS, RA_MODEL_{ID}_*)
   agent-loop.js           Single-agent loop + multi-agent orchestrator with sub-agents
   llm-client.js           OpenAI-compatible streaming client (native https, proxy-aware)
   system-prompt.js        Dynamic prompt with auto-loaded skills + web-search gating
   sessions.js             Session persistence (~/.research-agent/sessions/)
+  usage-log.js            Per-user usage event log (~/.research-agent/usage/YYYY-MM-DD.jsonl)
+  pricing.js              Per-user model pricing helper for /api/usage
   confirmations.js        User approval flow for run_shell
   tools/
     index.js              Tool registry (12 tools)
@@ -59,7 +64,9 @@ client/
     i18n.js               en / zh-CN translations; runtime selector + localStorage
   components/             ChatView, MessageBubble (copy + download .md),
                           ThinkingBlock, ToolCallBlock (inline images),
-                          CodeBlock, FileBrowser, SessionSidebar, InputBar
+                          CodeBlock, FileBrowser, SessionSidebar, InputBar,
+                          ModelSettings (tabs: Models, Usage),
+                          UsagePanel, SessionInfoPanel
   styles.css              Global styles, light/dark via [data-theme]
 views/index.hbs           Handlebars template
 ```
@@ -95,6 +102,8 @@ RA_MODEL_DEEPSEEK_ENDPOINT=https://...  # OpenAI-compatible endpoint
 RA_MODEL_DEEPSEEK_TOKEN=...             # Bearer token
 RA_MODEL_DEEPSEEK_MODEL=default         # Model name sent to API
 RA_MODEL_DEEPSEEK_USE_PROXY=1           # Route via http_proxy/https_proxy
+RA_MODEL_DEEPSEEK_COST_INPUT=0.27       # USD per 1M input tokens (optional)
+RA_MODEL_DEEPSEEK_COST_OUTPUT=1.10      # USD per 1M output tokens (optional)
 ```
 
 ID → env var prefix: uppercase, hyphens and dots become underscores.
@@ -112,7 +121,25 @@ RA_SCHEDULER=slurm
 RA_AGENT_MODE=single|multi                    # Default: single
 RA_AGENT_MAX_ITERATIONS=8                     # Max iterations per sub-agent
 RA_SHELL_AUTO_APPROVE=git,make                # Append to the in-code auto-approve list
+RA_USAGE_RETENTION_DAYS=                      # Prune ~/.research-agent/usage/*.jsonl older than N days (unset = keep forever)
 ```
+
+## Usage tracking
+
+Each Passenger process appends metadata events (no message content) to
+`~/.research-agent/usage/YYYY-MM-DD.jsonl`. Event types: `message_sent`,
+`llm_response` (tokens/duration/model/agent), `tool_call`, `error`
+(`llm_error`/`tool_error`/`timeout`), `aborted` (user-stop mid-stream).
+
+The Settings dialog has a **Usage** tab showing the user's own messages-per-day,
+tokens per model, tool mix, error rate, and cost (computed via
+`RA_MODEL_*_COST_INPUT/OUTPUT`). A session-info button (top-right of the chat)
+opens a per-session breakdown for the currently-loaded session.
+
+Admin org-wide reports: run `bin/usage-report.js` as root. Reads
+`/etc/ood/config/apps/research-agent/pricing.json` (separate from per-user env
+so admins can edit prices without per-process reload). See `docs/PRIVACY.md`
+for what's logged and `docs/ADMIN_REPORT.md` for runbook.
 
 ## Deployment (Open OnDemand)
 

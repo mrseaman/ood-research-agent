@@ -21,6 +21,10 @@ async function* streamChat(messages, tools, modelConfig, options = {}) {
     model: modelConfig.model,
     messages: messages,
     stream: true,
+    // Most OpenAI-compatible servers (vLLM, DeepSeek public) emit a final chunk
+    // with a `usage` object when this is set. Callers that want token counts
+    // should watch for it on the yielded chunks.
+    stream_options: { include_usage: true },
   };
 
   if (tools && tools.length > 0) {

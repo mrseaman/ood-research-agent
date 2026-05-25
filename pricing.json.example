@@ -1,0 +1,6 @@
+{
+  "deepseek": { "input": 0.27, "output": 1.10 },
+  "deepseek-v3.2": { "input": 0.27, "output": 1.10 },
+  "deepseek-v4-pro": { "input": 0.0, "output": 0.0 },
+  "qwen3-32b": { "input": 0.0, "output": 0.0 }
+}

@@ -4,6 +4,7 @@ import InputBar from './components/InputBar';
 import SessionSidebar from './components/SessionSidebar';
 import FileBrowser from './components/FileBrowser';
 import ModelSettings from './components/ModelSettings';
+import SessionInfoPanel from './components/SessionInfoPanel';
 import { streamChat } from './lib/sse';
 import { apiFetch } from './lib/api';
 import { t, getLocale, setLocale, getAvailableLocales } from './lib/i18n';
@@ -35,6 +36,7 @@ export default function App() {
   const [autoApproveShell, setAutoApproveShell] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
+  const [sessionInfoOpen, setSessionInfoOpen] = useState(false);
   const abortRef = useRef(null);
   const autoApproveRef = useRef(false);
 
@@ -336,8 +338,8 @@ export default function App() {
       </aside>
 
       <main className="chat-main">
-        {models.length > 1 && (
-          <div className="chat-toolbar">
+        <div className="chat-toolbar">
+          {models.length > 1 ? (
             <select
               className="model-select"
               value={selectedModel}
@@ -359,8 +361,20 @@ export default function App() {
                 </optgroup>
               )}
             </select>
-          </div>
-        )}
+          ) : <div />}
+          <button
+            className="icon-btn chat-info-btn"
+            onClick={() => setSessionInfoOpen(true)}
+            title={t('sessionInfo') || 'Session info'}
+            aria-label="Session info"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </button>
+        </div>
 
         <div className="chat-card">
           <ChatView messages={messages} />
@@ -390,6 +404,12 @@ export default function App() {
           open={modelSettingsOpen}
           onClose={() => setModelSettingsOpen(false)}
           onChanged={refreshModels}
+        />
+
+        <SessionInfoPanel
+          open={sessionInfoOpen}
+          onClose={() => setSessionInfoOpen(false)}
+          sessionId={sessionId}
         />
 
         {pendingConfirm && (

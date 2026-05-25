@@ -24,6 +24,12 @@ const config = require('./server/config');
 const { validatePath, IMAGE_EXTS, MIME_BY_EXT } = require('./server/tools/file-ops');
 const { runShell, setShellCwd } = require('./server/tools/command-ops');
 const userModels = require('./server/user-models');
+const usageLog = require('./server/usage-log');
+const { getPricing } = require('./server/pricing');
+
+// Optional retention: prune local usage files on startup if RA_USAGE_RETENTION_DAYS is set.
+const retentionDays = parseInt(process.env.RA_USAGE_RETENTION_DAYS || '0', 10);
+if (retentionDays > 0) usageLog.pruneOld(retentionDays);
 
 // CSRF setup — persist secret across Passenger restarts so issued tokens stay valid
 const tokens = new Tokens({});
@@ -119,6 +125,8 @@ router.post('/api/chat', csrfProtect, (req, res) => {
     return res.status(400).json({ error: 'messages array required' });
   }
 
+  usageLog.logEvent({ event: 'message_sent', session_id: sessionId || null, model: modelId });
+
   // Set up SSE
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -127,18 +135,27 @@ router.post('/api/chat', csrfProtect, (req, res) => {
     'X-Accel-Buffering': 'no', // disable nginx buffering
   });
 
-  // Handle client disconnect
+  // Handle client disconnect — log aborts so we can distinguish user-stops
+  // from completed responses in the usage report.
   let closed = false;
-  req.on('close', () => { closed = true; });
+  let completed = false;
+  req.on('close', () => {
+    closed = true;
+    if (!completed) {
+      usageLog.logEvent({ event: 'aborted', session_id: sessionId || null, model: modelId });
+    }
+  });
 
   runAgentLoop(res, messages, modelId, {
     thinking: thinking !== undefined ? !!thinking : undefined,
     webSearch: webSearch !== undefined ? !!webSearch : false,
+    sessionId: sessionId || null,
   }).catch(err => {
     if (!closed) {
       res.write(`event: error\ndata: ${JSON.stringify({ text: err.message })}\n\n`);
     }
   }).finally(() => {
+    completed = true;
     if (!closed) {
       res.end();
     }
@@ -169,6 +186,23 @@ router.post('/api/confirm/:id', csrfProtect, (req, res) => {
     return res.status(404).json({ error: 'Confirmation not found or expired' });
   }
   res.json({ ok: true });
+});
+
+// --- Usage API ---
+
+router.get('/api/usage', (req, res) => {
+  const days = Math.max(1, Math.min(365, parseInt(req.query.days || '30', 10) || 30));
+  const sessionId = req.query.session_id || null;
+  try {
+    const pricing = getPricing();
+    if (sessionId && req.query.detail === 'session') {
+      const stats = usageLog.sessionStats(sessionId, pricing);
+      return res.json(stats || { sessionId, empty: true });
+    }
+    res.json(usageLog.aggregate({ days, sessionId, pricing }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Session API ---

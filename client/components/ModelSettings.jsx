@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { t } from '../lib/i18n';
+import UsagePanel from './UsagePanel';
 
 const emptyForm = {
   id: '',
@@ -17,6 +18,7 @@ export default function ModelSettings({ open, onClose, onChanged }) {
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [tab, setTab] = useState('models'); // 'models' | 'usage'
 
   const refresh = useCallback(async () => {
     try {
@@ -86,10 +88,25 @@ export default function ModelSettings({ open, onClose, onChanged }) {
     <div className="confirm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="settings-dialog">
         <div className="settings-header">
-          <h3>{t('modelSettings') || 'Your Models'}</h3>
+          <h3>{t('settings') || 'Settings'}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
+        <div className="settings-tabs">
+          <button
+            className={`settings-tab ${tab === 'models' ? 'active' : ''}`}
+            onClick={() => setTab('models')}
+          >{t('modelsTab') || 'Models'}</button>
+          <button
+            className={`settings-tab ${tab === 'usage' ? 'active' : ''}`}
+            onClick={() => setTab('usage')}
+          >{t('usageTab') || 'Usage'}</button>
+        </div>
 
+        {tab === 'usage' ? (
+          <div className="settings-body settings-body-single">
+            <UsagePanel />
+          </div>
+        ) : (
         <div className="settings-body">
           <div className="settings-list">
             {models.length === 0 && <div className="sidebar-empty">{t('noUserModels') || 'No user models yet'}</div>}
@@ -171,6 +188,7 @@ export default function ModelSettings({ open, onClose, onChanged }) {
             </div>
           </form>
         </div>
+        )}
       </div>
     </div>
   );

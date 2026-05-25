@@ -16,6 +16,8 @@ function parseModels() {
   if (modelIds.length > 0) {
     return modelIds.map(id => {
       const prefix = `RA_MODEL_${id.toUpperCase().replace(/[-.]/g, '_')}_`;
+      const costIn = parseFloat(process.env[`${prefix}COST_INPUT`] || '');
+      const costOut = parseFloat(process.env[`${prefix}COST_OUTPUT`] || '');
       return {
         id,
         name: process.env[`${prefix}NAME`] || id,
@@ -23,6 +25,8 @@ function parseModels() {
         token: process.env[`${prefix}TOKEN`] || '',
         model: process.env[`${prefix}MODEL`] || 'default',
         useProxy: process.env[`${prefix}USE_PROXY`] === '1',
+        costInput: Number.isFinite(costIn) ? costIn : 0,
+        costOutput: Number.isFinite(costOut) ? costOut : 0,
       };
     });
   }
