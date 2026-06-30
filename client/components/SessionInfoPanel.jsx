@@ -40,7 +40,7 @@ export default function SessionInfoPanel({ open, onClose, sessionId }) {
     <div className="confirm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="session-info-dialog">
         <div className="settings-header">
-          <h3>{t('sessionInfo') || 'Session info'}</h3>
+          <h3>{t('sessionInfo') || 'Session Info'}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="settings-body settings-body-single">
@@ -56,11 +56,11 @@ export default function SessionInfoPanel({ open, onClose, sessionId }) {
                   <div className="usage-stat-value">{stats.messages}</div>
                 </div>
                 <div className="usage-stat">
-                  <div className="usage-stat-label">{t('tokensIn') || 'Tokens in'}</div>
+                  <div className="usage-stat-label">{t('tokensIn') || 'Tokens In'}</div>
                   <div className="usage-stat-value">{fmtNum(stats.tokensIn)}</div>
                 </div>
                 <div className="usage-stat">
-                  <div className="usage-stat-label">{t('tokensOut') || 'Tokens out'}</div>
+                  <div className="usage-stat-label">{t('tokensOut') || 'Tokens Out'}</div>
                   <div className="usage-stat-value">{fmtNum(stats.tokensOut)}</div>
                 </div>
                 <div className="usage-stat">
@@ -79,7 +79,7 @@ export default function SessionInfoPanel({ open, onClose, sessionId }) {
 
               {stats.byModel.length > 0 && (
                 <div className="usage-section">
-                  <div className="usage-section-title">{t('byModel') || 'By model'}</div>
+                  <div className="usage-section-title">{t('byModel') || 'By Model'}</div>
                   <table className="usage-table">
                     <thead>
                       <tr>
@@ -105,7 +105,7 @@ export default function SessionInfoPanel({ open, onClose, sessionId }) {
 
               {stats.byAgent.length > 1 && (
                 <div className="usage-section">
-                  <div className="usage-section-title">{t('byAgent') || 'By agent'}</div>
+                  <div className="usage-section-title">{t('byAgent') || 'By Agent'}</div>
                   <table className="usage-table">
                     <thead>
                       <tr><th>{t('agent') || 'Agent'}</th><th>{t('tokensIn') || 'In'}</th><th>{t('tokensOut') || 'Out'}</th></tr>
@@ -121,7 +121,7 @@ export default function SessionInfoPanel({ open, onClose, sessionId }) {
 
               {stats.toolMix.length > 0 && (
                 <div className="usage-section">
-                  <div className="usage-section-title">{t('toolMix') || 'Tool usage'}</div>
+                  <div className="usage-section-title">{t('toolMix') || 'Tool Usage'}</div>
                   <table className="usage-table">
                     <tbody>
                       {stats.toolMix.map(r => (
@@ -133,8 +133,8 @@ export default function SessionInfoPanel({ open, onClose, sessionId }) {
               )}
 
               <div className="usage-section usage-future">
-                <div className="usage-section-title">{t('contextWindow') || 'Context window'}</div>
-                <div className="usage-empty">{t('comingSoon') || 'Coming soon'}</div>
+                <div className="usage-section-title">{t('contextWindow') || 'Context Window'}</div>
+                <div className="usage-empty">{t('comingSoon') || 'Coming Soon'}</div>
               </div>
             </>
           )}

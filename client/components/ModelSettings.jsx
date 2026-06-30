@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { t } from '../lib/i18n';
 import UsagePanel from './UsagePanel';
+import SetupGuide from './SetupGuide';
 
 const emptyForm = {
   id: '',
@@ -100,16 +101,24 @@ export default function ModelSettings({ open, onClose, onChanged }) {
             className={`settings-tab ${tab === 'usage' ? 'active' : ''}`}
             onClick={() => setTab('usage')}
           >{t('usageTab') || 'Usage'}</button>
+          <button
+            className={`settings-tab ${tab === 'guide' ? 'active' : ''}`}
+            onClick={() => setTab('guide')}
+          >{t('guideTab') || 'Setup Guide'}</button>
         </div>
 
-        {tab === 'usage' ? (
+        {tab === 'guide' ? (
+          <div className="settings-body settings-body-single">
+            <SetupGuide />
+          </div>
+        ) : tab === 'usage' ? (
           <div className="settings-body settings-body-single">
             <UsagePanel />
           </div>
         ) : (
         <div className="settings-body">
           <div className="settings-list">
-            {models.length === 0 && <div className="sidebar-empty">{t('noUserModels') || 'No user models yet'}</div>}
+            {models.length === 0 && <div className="sidebar-empty">{t('noUserModels') || 'No user models added yet'}</div>}
             {models.map(m => (
               <div key={m.id} className={`settings-item ${editing && editing.id === m.id ? 'active' : ''}`}>
                 <div className="settings-item-text" onClick={() => startEdit(m)}>
@@ -120,13 +129,13 @@ export default function ModelSettings({ open, onClose, onChanged }) {
               </div>
             ))}
             <button className="sidebar-new-chat" onClick={startNew}>
-              + {t('addModel') || 'Add model'}
+              + {t('addModel') || 'Add Model'}
             </button>
           </div>
 
           <form className="settings-form" onSubmit={handleSave}>
             <label>
-              <span>{t('modelDisplayName') || 'Display name'}</span>
+              <span>{t('modelDisplayName') || 'Display Name'}</span>
               <input
                 type="text"
                 value={form.name}
@@ -146,7 +155,7 @@ export default function ModelSettings({ open, onClose, onChanged }) {
               />
             </label>
             <label>
-              <span>{t('modelName') || 'Model name'}</span>
+              <span>{t('modelName') || 'Model Name'}</span>
               <input
                 type="text"
                 value={form.model}
@@ -156,7 +165,7 @@ export default function ModelSettings({ open, onClose, onChanged }) {
               />
             </label>
             <label>
-              <span>{t('token') || 'API token'}{editing ? ` (${t('leaveBlankToKeep') || 'leave blank to keep'})` : ''}</span>
+              <span>{t('token') || 'API Token'}{editing ? ` (${t('leaveBlankToKeep') || 'leave blank to keep'})` : ''}</span>
               <input
                 type="password"
                 value={form.token}
@@ -171,7 +180,7 @@ export default function ModelSettings({ open, onClose, onChanged }) {
                 checked={form.useProxy}
                 onChange={(e) => setForm({ ...form, useProxy: e.target.checked })}
               />
-              <span>{t('useProxy') || 'Route through HTTP proxy'}</span>
+              <span>{t('useProxy') || 'Route Through HTTP Proxy'}</span>
             </label>
 
             {error && <div className="settings-error">{error}</div>}

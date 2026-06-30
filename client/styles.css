@@ -1291,6 +1291,64 @@ body {
   margin-top: 4px;
 }
 
+/* ============ Setup Guide ============ */
+.setup-guide {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+.setup-guide h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.setup-guide h4 {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 20px 0 8px;
+}
+.setup-guide p { margin: 6px 0; }
+.setup-guide ul {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.setup-guide li { margin: 2px 0; }
+.setup-guide code {
+  background: var(--bg-hover);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.setup-guide pre {
+  background: var(--bg-hover);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.setup-guide pre code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.setup-guide table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12.5px;
+}
+.setup-guide th,
+.setup-guide td {
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+}
+.setup-guide th {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+
 /* ============ Job status badge ============ */
 .job-status {
   display: inline-block;

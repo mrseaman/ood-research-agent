@@ -96,11 +96,11 @@ export default function UsagePanel() {
           <div className="usage-stat-value">{fmtNum(data.totalMessages)}</div>
         </div>
         <div className="usage-stat">
-          <div className="usage-stat-label">{t('tokensIn') || 'Tokens in'}</div>
+          <div className="usage-stat-label">{t('tokensIn') || 'Tokens In'}</div>
           <div className="usage-stat-value">{fmtNum(data.totalTokensIn)}</div>
         </div>
         <div className="usage-stat">
-          <div className="usage-stat-label">{t('tokensOut') || 'Tokens out'}</div>
+          <div className="usage-stat-label">{t('tokensOut') || 'Tokens Out'}</div>
           <div className="usage-stat-value">{fmtNum(data.totalTokensOut)}</div>
         </div>
         <div className="usage-stat">
@@ -108,7 +108,7 @@ export default function UsagePanel() {
           <div className="usage-stat-value">{fmtCost(data.cost.total)}</div>
         </div>
         <div className="usage-stat">
-          <div className="usage-stat-label">{t('errorRate') || 'Error rate'}</div>
+          <div className="usage-stat-label">{t('errorRate') || 'Error Rate'}</div>
           <div className="usage-stat-value">{fmtPct(data.errors.rate)}</div>
         </div>
         <div className="usage-stat">
@@ -118,17 +118,17 @@ export default function UsagePanel() {
       </div>
 
       <div className="usage-section">
-        <div className="usage-section-title">{t('messagesPerDay') || 'Messages per day'}</div>
+        <div className="usage-section-title">{t('messagesPerDay') || 'Messages Per Day'}</div>
         <Sparkline values={msgCounts} />
       </div>
 
       <div className="usage-section">
-        <div className="usage-section-title">{t('tokensPerDay') || 'Tokens per day (in + out)'}</div>
+        <div className="usage-section-title">{t('tokensPerDay') || 'Tokens Per Day (In + Out)'}</div>
         <Sparkline values={tokensByDay} color="var(--accent-2, #38bdf8)" />
       </div>
 
       <div className="usage-section">
-        <div className="usage-section-title">{t('byModel') || 'By model'}</div>
+        <div className="usage-section-title">{t('byModel') || 'By Model'}</div>
         <table className="usage-table">
           <thead>
             <tr>
@@ -140,7 +140,7 @@ export default function UsagePanel() {
           </thead>
           <tbody>
             {data.cost.byModel.length === 0 && (
-              <tr><td colSpan="4" className="usage-empty">{t('noData') || 'No data'}</td></tr>
+              <tr><td colSpan="4" className="usage-empty">{t('noData') || 'No Data'}</td></tr>
             )}
             {data.cost.byModel.map(r => (
               <tr key={r.model}>
@@ -156,7 +156,7 @@ export default function UsagePanel() {
 
       {data.tokensByAgent.length > 1 && (
         <div className="usage-section">
-          <div className="usage-section-title">{t('byAgent') || 'By agent (multi-mode)'}</div>
+          <div className="usage-section-title">{t('byAgent') || 'By Agent (Multi-mode)'}</div>
           <table className="usage-table">
             <thead>
               <tr>
@@ -179,11 +179,11 @@ export default function UsagePanel() {
       )}
 
       <div className="usage-section">
-        <div className="usage-section-title">{t('toolMix') || 'Tool usage'}</div>
+        <div className="usage-section-title">{t('toolMix') || 'Tool Usage'}</div>
         <table className="usage-table">
           <tbody>
             {data.toolMix.length === 0 && (
-              <tr><td colSpan="2" className="usage-empty">{t('noData') || 'No data'}</td></tr>
+              <tr><td colSpan="2" className="usage-empty">{t('noData') || 'No Data'}</td></tr>
             )}
             {data.toolMix.map(r => (
               <tr key={r.tool}>
@@ -197,7 +197,7 @@ export default function UsagePanel() {
 
       {data.errors.total > 0 && (
         <div className="usage-section">
-          <div className="usage-section-title">{t('errors') || 'Errors'}</div>
+          <div className="usage-section-title">{t('errors') || 'Recent Errors'}</div>
           <table className="usage-table">
             <tbody>
               {data.errors.byKind.map(r => (
